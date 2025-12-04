@@ -11,14 +11,17 @@
 #define INTERPOLATE(a, b, frac) (((1.0f - ((float)(frac))) * ((float)a) + ((float)(frac)) * ((float)b)))
 
 
-void set_walls_dirichlet_boundary_conditions(float *EfieldsX, float *EfieldsY, const Dimensions &dims, const float time, const float dphase_net, const int num_of_transmitter_elements, const int obstacle_fraction)
+void set_walls_dirichlet_boundary_conditions(float *EfieldsX, float *EfieldsY, const Dimensions &dims, const float time, const float dphase_net, const int num_of_transmitter_elements, const float obstacle_fraction, const float frequency_transmitter)
 {
 
     const int nx = dims.nx;
     const int ny = dims.ny;
-    const int obstacle_spacing = ((int)(((float)nx)*obstacle_fraction))/num_of_transmitter_elements;
-    const int start_x = (nx - (1-obstacle_fraction))/2;
+    // std::cout<< "Obstacle fraction: " << obstacle_fraction << std::endl;
+    // std::cout<< "Num transmitter elements: " << num_of_transmitter_elements << std::endl;
+    const int obstacle_spacing = ((int)(((float)nx)*obstacle_fraction)/num_of_transmitter_elements);
+    const int start_x = nx*((1-obstacle_fraction)/2);
     const float dphase_elem = dphase_net/num_of_transmitter_elements;
+    // std::cout<< "Transmitter start x: " << start_x << ", spacing: " << obstacle_spacing << std::endl;
     for(int j=0; j < ny; j++){
         EfieldsX[FLAT(0, j, nx)] = EfieldsX[FLAT(1, j, nx)] ;
         EfieldsX[FLAT(nx-1, j, nx)] = EfieldsX[FLAT(nx-2, j, nx)];
@@ -31,7 +34,7 @@ void set_walls_dirichlet_boundary_conditions(float *EfieldsX, float *EfieldsY, c
     }
     for(int elem_i = 0; elem_i<num_of_transmitter_elements; elem_i++){
         const int obs_x = start_x + elem_i * obstacle_spacing;
-        EfieldsY[FLAT(obs_x, 0, nx)] = sinf(2.0f * 3.14159265f * time + dphase_elem * (float)(elem_i));
+        EfieldsY[FLAT(obs_x, 0, nx)] = E_magnitude_default* sinf(2.0f * 3.14159265f * frequency_transmitter* time + dphase_elem * (float)(elem_i));
         EfieldsX[FLAT(obs_x, 0, nx)] = 0.0f;
     }
 
@@ -68,6 +71,18 @@ void step_time(float* EfieldsX, float* EfieldsY, const Dimensions& dims, const f
             const int lap_idx = FLAT(i-1, j-1, nx-2);
             EfieldsX[idx] += csq * laplaciansX[lap_idx] * dt;
             EfieldsY[idx] += csq * laplaciansY[lap_idx] * dt;
+        }
+    }
+}
+void get_field_strength_magnitude(const float* EfieldsX, const float* EfieldsY, const Dimensions& dims, float* magnitude_out){
+    const int nx = dims.nx;
+    const int ny = dims.ny;
+    for(int i=0; i< nx; i++){
+        for(int j=0; j< ny; j++){
+            const int idx = FLAT(i, j, nx);
+            const float Ex = EfieldsX[idx];
+            const float Ey = EfieldsY[idx];
+            magnitude_out[idx] = sqrtf(Ex*Ex + Ey*Ey);
         }
     }
 }

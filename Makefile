@@ -10,7 +10,7 @@ CXXFLAGS := -Wall -Wno-everything -std=c++20 -O2 \
 LDFLAGS := -L/usr/local/lib
 LIBS := -lsfml-graphics -lsfml-window -lsfml-system -lGL -lpthread -ldl
 
-TARGET := fluid_sim
+TARGET := E_sim
 
 SRC := main.cpp \
        imgui/imgui.cpp \

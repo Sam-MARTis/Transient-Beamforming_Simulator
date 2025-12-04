@@ -39,6 +39,7 @@ Might consider direct OpenGL rendering.
 */
 float *EfieldsX = new float[NX* NY];
 float *EfieldsY = new float[NX* NY];
+float *Emags = new float[NX* NY];
 
 // GUI variables
 float *rand_property = new float[NX * NY];
@@ -60,6 +61,16 @@ sf::Vector2i mouse_previous_screen_pos;
 float dt_inner = 0.016f;
 float sim_time = 0.0f;
 
+const float elements_fraction = 0.4f;
+const int num_transmitter_elements = 5;
+bool play_simulation = false;
+float Ey_range = 0.1f;
+float frequency_transmitter = 1.0f;
+float csq = 10.0f;
+float dphase_net = 1.0f;
+float avg_disp_qty = 0.0f;
+
+int speed_up_factor = 1;
 int main()
 {
     window.create(sf::VideoMode({SCREEN_WIDTH + (SCREEN_OFFSET_X + SCREEN_END_X_PADDING), SCREEN_HEIGHT + (SCREEN_OFFSET_Y + SCREEN_END_Y_PADDING)}, 10), "Fluid Simulation");
@@ -67,23 +78,11 @@ int main()
     ImGui::SFML::Init(window);
     initialize_shapes(main_shapes, NX, NY, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_OFFSET_X, SCREEN_OFFSET_Y);
 
-    for (int i = 0; i < (NX + 1) * NY; i++)
-    {
-        hvels[i] = -randf(-1.0f, 1.0f);
-    }
-
-    for (int i = 0; i < NX * (NY + 1); i++)
-    {
-        vvels[i] = randf(-1.0f, 1.0f);
-    }
-
-    for (int i = 0; i < NX * NY; i++)
-    {
-        rand_property[i] = randf(0.0f, 1.0f);
-    }
-    for (int i = 0; i < NX * NY; i++)
-    {
-        pressures[i] = 0.0f;
+    for(int i =0; i<NX; i++){
+        for(int j=0; j<NY; j++){
+            EfieldsX[FLAT(i, j, NX)] = 0.0f;
+            EfieldsY[FLAT(i, j, NX)] = 0.0f;
+        }
     }
     // for(int i=0; i< NX; i++){
     //     obstacles[FLAT(i, 0, NX)] = true;
@@ -95,31 +94,19 @@ int main()
     // }
 
     // Okay, render loop. We got this
-    float mouse_x_physics = SIZE_PHYSICS_X_MAX_default / 2.0f;
-    float mouse_y_physics = SIZE_PHYSICS_Y_MAX_default / 2.0f;
-    sf::Vector2i mouse_position_screen;
 
     sf::Clock deltaClock;
-    set_walls_dirichlet_boundary_conditions(hvels, vvels, sim_dimensions, nullptr, 0);
+    set_walls_dirichlet_boundary_conditions(EfieldsX, EfieldsY, sim_dimensions, sim_time, dphase_net, num_transmitter_elements, elements_fraction, frequency_transmitter);
     while (window.isOpen())
     {
-        if (solve_pressure_divergence_free)
-        {
-            if(apply_gravity) {
-                apply_gravity_to_velocity_field(vvels, sim_dimensions, walls, gravity_acceleration, DT);
-                // set_walls_dirichlet_boundary_conditions(hvels, vvels, sim_dimensions, nullptr, 0);
-                
-            }
-            set_walls_dirichlet_boundary_conditions(hvels, vvels, sim_dimensions, nullptr, 0);
-            calculate_divergences(hvels, vvels, sim_dimensions, divergences);
-            solve_pressure_for_divergence_free_velocity_field(hvels, vvels, pressures, sim_dimensions, fluid_density, walls, DT, DIVERGENCE_ITERATIONS);
-            apply_pressure_gradient_to_velocity_field(hvels, vvels, pressures, sim_dimensions, fluid_density, DT);
-            set_walls_dirichlet_boundary_conditions(hvels, vvels, sim_dimensions, nullptr, 0);
-            calculate_divergences(hvels, vvels, sim_dimensions, divergences);
 
-            if(advect_velocity_field) {
-                advect_velocities(hvels, vvels, sim_dimensions, walls, DT, current_iterator); 
-                set_walls_dirichlet_boundary_conditions(hvels, vvels, sim_dimensions, nullptr, 0);               
+        if (play_simulation)
+        {
+            for(int i=0; i< speed_up_factor; i++){
+                
+                set_walls_dirichlet_boundary_conditions(EfieldsX, EfieldsY, sim_dimensions, sim_time, dphase_net, num_transmitter_elements, elements_fraction, frequency_transmitter);
+                step_time(EfieldsX, EfieldsY, sim_dimensions, csq, DT);
+                sim_time += DT;
             }
         }
         while (const std::optional<sf::Event> event = window.pollEvent())
@@ -136,35 +123,7 @@ int main()
                     window.close();
                 }
             }
-            else if (event->is<sf::Event::MouseButtonPressed>())
-            {
-                mouse_previous_screen_pos = sf::Mouse::getPosition(window);
-                is_mouse_dragging = true;
-            }
-            else if (event->is<sf::Event::MouseButtonReleased>())
-            {
-                is_mouse_dragging = false;
-            }
-            else if (event->is<sf::Event::MouseMoved>())
-            {
-                if (is_mouse_dragging)
-                {
-                    sf::Vector2i mouse_current_screen_pos = sf::Mouse::getPosition(window);
-                    sf::Vector2i mouse_delta_screen_pos = mouse_current_screen_pos - mouse_previous_screen_pos;
-                    sf::Vector2f mouse_current_physics_pos = sf::Vector2f(
-                        (float)((mouse_current_screen_pos.x - SCREEN_OFFSET_X) * ((float)SIZE_PHYSICS_X_MAX_default / (float)SCREEN_WIDTH)),
-                        (float)((mouse_current_screen_pos.y - SCREEN_OFFSET_Y) * ((float)SIZE_PHYSICS_Y_MAX_default / (float)SCREEN_HEIGHT)));
-                        const float slowdown = 0.1;
-                    sf::Vector2f mouse_velocity_physics = sf::Vector2f(slowdown*(float)mouse_delta_screen_pos.x * ((float)SIZE_PHYSICS_X_MAX_default / (float)SCREEN_WIDTH), slowdown*(float)mouse_delta_screen_pos.y * ((float)SIZE_PHYSICS_Y_MAX_default / (float)SCREEN_HEIGHT)) / dt_inner;
-
-                    // impart_velocity_to_fluid_field(hvels, vvels, sim_dimensions, mouse_current_physics_pos.x, mouse_current_physics_pos.y, 0.01f, mouse_velocity_physics);
-                    // int mouse_x_cell = (int)((float)(mouse_current_screen_pos.x - SCREEN_OFFSET_X) * ((float)SIZE_PHYSICS_X_MAX_default / (float)SCREEN_WIDTH));
-                    // int mouse_y_cell = (int)((float)(mouse_current_screen_pos.y - SCREEN_OFFSET_Y) * ((float)SIZE_PHYSICS_Y_MAX_default / (float)SCREEN_HEIGHT));
-                    // const int lower_idx = clamp(mouse_x_cell, 0, NX - 1) + clamp(mouse_y_cell, 0, NY - 1) * NX;
-                    // // Handle mouse dragging
-                    // mouse_previous_screen_pos = mouse_current_screen_pos;
-                }
-            }
+            
             else if (event->is<sf::Event::MouseWheelScrolled>())
             {
                 // mouse_position_screen = sf::Mouse::getPosition(window);
@@ -180,47 +139,18 @@ int main()
         ImGui::Text("Main Params");
         ImGui::InputFloat("dt", &DT, DT_default * 0.1f, DT_default * 2.0f, "%.5f");
         DT = (DT < MIN_DT) ? MIN_DT : DT;
-        ImGui::SliderFloat("Fluid Density", &fluid_density, 0.1f, 10.0f, "%.3f");
+        
 
         ImGui::NewLine();
-        ImGui::Text("Divergence Solver");
-        ImGui::InputInt("Iter", &DIVERGENCE_ITERATIONS, 1, 10);
-        ImGui::SameLine();
-        ImGui::Checkbox("Solve", &solve_pressure_divergence_free);
+        ImGui::Checkbox("Solve", &play_simulation);
+        ImGui::SliderFloat("Input Frequency (Hz)", &frequency_transmitter, 0.1f, 10.0f, "%.3f Hz");
+        ImGui::InputFloat("C^2", &csq, 1.0f, 100.0f, "%.3f");
+        ImGui::InputInt("Speed Up Factor", &speed_up_factor, 1, 50);
+        ImGui::InputFloat("Net Phase Delay (rad)", &dphase_net, 0.1f, 3.14f, "%.3f rad");
+        ImGui::SliderFloat("Offset Display", &avg_disp_qty, -10.0f*Ey_range, 10.0f*Ey_range, "%.3f");
         ImGui::NewLine();
-        if (solve_pressure_divergence_free)
-        {
-            ImGui::Spacing();
-            ImGui::Text("Gravity Settings");
-            ImGui::InputFloat("g", &gravity_acceleration, 0.1f, 50.0f, "%.3f");
-            ImGui::SameLine();
-            ImGui::Checkbox("Apply##Gravity", &apply_gravity);
-
-            ImGui::Spacing();
-            ImGui::Spacing();
-            
-            ImGui::Text("Advection Solver");
-            if (ImGui::BeginCombo("Iterator", iterators[current_iterator]))
-            {
-                for (int n = 0; n < IM_ARRAYSIZE(iterators); n++)
-                {
-                    bool is_selected = (current_iterator == n);
-                    if (ImGui::Selectable(iterators[n], is_selected))
-                    {
-                        current_iterator = n;
-                    }
-                    if (is_selected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::SameLine();
-            ImGui::Checkbox("Solve##Advection", &advect_velocity_field);
-        }
 
         ImGui::Text("Rendering Options");
-        ImGui::Checkbox("Render Shapes", &render_shapes);
-        ImGui::Text("Simulation Mode");
         if (ImGui::BeginCombo("##mode_selector", modes[current_mode]))
         {
             for (int n = 0; n < IM_ARRAYSIZE(modes); n++)
@@ -235,81 +165,86 @@ int main()
             }
             ImGui::EndCombo();
         }
-        if (current_mode == DISPLAY_DIVERGENCE_INDEX)
+        // if (current_mode == DISPLAY_DIVERGENCE_INDEX)
         {
             ImGui::Spacing();
-            ImGui::SliderFloat("|Div| Range", &divergence_magnitude_range, 0.05f, 5.0f, "%.3f");
-            ImGui::Text("Divergence Color Settings");
+            ImGui::SliderFloat("Electric Y Range", &Ey_range, 0.0001f , 0.005f , "%.3f");
+            ImGui::Text("Electric Color Settings");
             ImGui::ColorEdit3("Color 1", color1);
             ImGui::ColorEdit3("Color 2", color2);
             ImGui::Spacing();
         }
-        else if (current_mode == DISPLAY_PRESSURE_INDEX)
-        {
-            ImGui::Spacing();
-            ImGui::SliderFloat("Pressure Range", &pressure_magnitude_range, 0.1f, 500.0f, "%.3f");
-            ImGui::Text("Pressure Color Settings");
-            ImGui::ColorEdit3("Color 1", color1);
-            ImGui::ColorEdit3("Color 2", color2);
-            ImGui::Spacing();
-        }
+        // else if (current_mode == DISPLAY_PRESSURE_INDEX)
+        // {
+        //     ImGui::Spacing();
+        //     ImGui::SliderFloat("Pressure Range", &pressure_magnitude_range, 0.1f, 500.0f, "%.3f");
+        //     ImGui::Text("Pressure Color Settings");
+        //     ImGui::ColorEdit3("Color 1", color1);
+        //     ImGui::ColorEdit3("Color 2", color2);
+        //     ImGui::Spacing();
+        // }
 
-        ImGui::Checkbox("Render Edge Velocities", &render_edge_velocities);
-        if (render_edge_velocities)
-        {
+        // ImGui::Checkbox("Render Edge Velocities", &render_edge_velocities);
+        // if (render_edge_velocities)
+        // {
 
-            ImGui::Spacing();
-            if (ImGui::CollapsingHeader("Edge Velocity Settings"))
-            {
-                ImGui::SliderInt("Arrow Thickness", &arrow_thickness, 1, 5);
-                ImGui::SliderFloat("Arrow Head Fraction", &head_fraction, 0.01f, 0.7f, "%.3f");
-                ImGui::SliderFloat("Arrow Normalization", &arrow_normalization, 0.1f, 5.0f, "%.2f");
-                ImGui::SliderFloat("Arrow Max Size", &arrow_max_size, 0.1f, 100.0f, "%.2f");
-                ImGui::ColorEdit3("Arrow Color", arrow_color);
-            }
-        }
-        ImGui::Checkbox("Render Flow Field", &render_flow_field);
-        if (render_flow_field)
-        {
-            ImGui::Spacing();
-            if (ImGui::CollapsingHeader("Flow Field Settings"))
-            {
-                ImGui::SliderFloat("Flow Field Density X", &flow_field_density_x, 0.01f, 1.0f, "%.3f");
-                ImGui::SliderFloat("Flow Field Density Y", &flow_field_density_y, 0.01f, 1.0f, "%.3f");
-                ImGui::SliderInt("Flow Arrow Thickness", &flow_arrow_thickness, 1, 5);
-                ImGui::SliderFloat("Flow Arrow Head Fraction", &flow_arrow_head_fraction, 0.01f, 0.7f, "%.3f");
-                ImGui::SliderFloat("Flow Arrow Normalization", &flow_arrow_normalization, 0.1f, 5.0f, "%.2f");
-                ImGui::SliderFloat("Flow Arrow Max Size", &flow_arrow_max_size, 0.1f, 100.0f, "%.2f");
-                ImGui::ColorEdit3("Flow Field Color", flow_field_color);
-            }
-        }
+        //     ImGui::Spacing();
+        //     if (ImGui::CollapsingHeader("Edge Velocity Settings"))
+        //     {
+        //         ImGui::SliderInt("Arrow Thickness", &arrow_thickness, 1, 5);
+        //         ImGui::SliderFloat("Arrow Head Fraction", &head_fraction, 0.01f, 0.7f, "%.3f");
+        //         ImGui::SliderFloat("Arrow Normalization", &arrow_normalization, 0.1f, 5.0f, "%.2f");
+        //         ImGui::SliderFloat("Arrow Max Size", &arrow_max_size, 0.1f, 100.0f, "%.2f");
+        //         ImGui::ColorEdit3("Arrow Color", arrow_color);
+        //     }
+        // }
+        // ImGui::Checkbox("Render Flow Field", &render_flow_field);
+        // if (render_flow_field)
+        // {
+        //     ImGui::Spacing();
+        //     if (ImGui::CollapsingHeader("Flow Field Settings"))
+        //     {
+        //         ImGui::SliderFloat("Flow Field Density X", &flow_field_density_x, 0.01f, 1.0f, "%.3f");
+        //         ImGui::SliderFloat("Flow Field Density Y", &flow_field_density_y, 0.01f, 1.0f, "%.3f");
+        //         ImGui::SliderInt("Flow Arrow Thickness", &flow_arrow_thickness, 1, 5);
+        //         ImGui::SliderFloat("Flow Arrow Head Fraction", &flow_arrow_head_fraction, 0.01f, 0.7f, "%.3f");
+        //         ImGui::SliderFloat("Flow Arrow Normalization", &flow_arrow_normalization, 0.1f, 5.0f, "%.2f");
+        //         ImGui::SliderFloat("Flow Arrow Max Size", &flow_arrow_max_size, 0.1f, 100.0f, "%.2f");
+        //         ImGui::ColorEdit3("Flow Field Color", flow_field_color);
+        //     }
+        // }
 
         ImGui::End();
 
         window.clear(sf::Color::Black);
-        if (render_shapes)
+        if (play_simulation)
         {
-            if (current_mode == DISPLAY_DIVERGENCE_INDEX)
-            {
-                display_shapes(window, main_shapes, sim_dimensions, divergences, -divergence_magnitude_range, divergence_magnitude_range, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
-            }
-            else if (current_mode == DISPLAY_DEFAULT_INDEX)
-            {
-                display_shapes(window, main_shapes, sim_dimensions, nullptr, 0.0f, 1.0f, sf::Color::Red, sf::Color::Blue);
-            }
-            else if (current_mode == DISPLAY_PRESSURE_INDEX)
-            {
-                display_shapes(window, main_shapes, sim_dimensions, pressures, -pressure_magnitude_range, pressure_magnitude_range, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
-            }
+            // sim_time += DT;
+            get_field_strength_magnitude(EfieldsX, EfieldsY, sim_dimensions, Emags);
+
+        
+        
+            display_shapes(window, main_shapes, sim_dimensions, Emags, avg_disp_qty, Ey_range + avg_disp_qty, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
+            // if (current_mode == DISPLAY_DIVERGENCE_INDEX)
+            // {
+            // }
+            // else if (current_mode == DISPLAY_DEFAULT_INDEX)
+            // {
+            //     display_shapes(window, main_shapes, sim_dimensions, nullptr, 0.0f, 1.0f, sf::Color::Red, sf::Color::Blue);
+            // }
+            // else if (current_mode == DISPLAY_PRESSURE_INDEX)
+            // {
+            //     display_shapes(window, main_shapes, sim_dimensions, pressures, -pressure_magnitude_range, pressure_magnitude_range, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
+            // }
         }
-        if (render_edge_velocities)
-        {
-            display_edge_velocities(window, hvels, vvels, sim_dimensions, arrow_normalization, arrow_max_size, arrow_thickness, head_fraction, convert_float_to_sf_colour(arrow_color));
-        }
-        if (render_flow_field)
-        {
-            display_flow_field(window, hvels, vvels, sim_dimensions, flow_field_density_x, flow_field_density_y, flow_arrow_normalization, flow_arrow_max_size, flow_arrow_thickness, flow_arrow_head_fraction, convert_float_to_sf_colour(flow_field_color));
-        }
+        // if (render_edge_velocities)
+        // {
+        //     display_edge_velocities(window, hvels, vvels, sim_dimensions, arrow_normalization, arrow_max_size, arrow_thickness, head_fraction, convert_float_to_sf_colour(arrow_color));
+        // }
+        // if (render_flow_field)
+        // {
+        //     display_flow_field(window, hvels, vvels, sim_dimensions, flow_field_density_x, flow_field_density_y, flow_arrow_normalization, flow_arrow_max_size, flow_arrow_thickness, flow_arrow_head_fraction, convert_float_to_sf_colour(flow_field_color));
+        // }
 
         ImGui::SFML::Render(window);
         window.display();

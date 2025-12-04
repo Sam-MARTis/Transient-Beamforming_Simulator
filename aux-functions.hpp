@@ -13,4 +13,4 @@ float map_screen_to_physics_x(const float screen_coord_x, const float screen_off
 float map_screen_to_physics_y(const float screen_coord_y, const float screen_offset_y, const float screen_physics_y_ratio);
 sf::Color convert_float_to_sf_colour(float color_float[3]);
 void impart_velocity_to_fluid_field(float *hvels, float *vvels, const Dimensions &dims, const float center_x, const float center_y, const float radius, const sf::Vector2f velocity);
-void impart_acceleration_to_fluid_field(float *hvels, float *vvels, const Dimensions &dims, const float center_x, const float center_y, const float radius, const sf::Vector2f acceleration, const float dt);
+
