@@ -37,54 +37,28 @@ sf::RectangleShape *main_shapes = new sf::RectangleShape[NX * NY];
 Note to self: Might ditch the sfml rectangular shape object when we move to the GPU.
 Might consider direct OpenGL rendering.
 */
-float *hvels = new float[(NX + 1) * NY];
-float *vvels = new float[NX * (NY + 1)];
-float *divergences = new float[NX * NY];
-float *pressures = new float[NX * NY];
-std::vector<bool> walls((NX) * (NY), false);
+float *EfieldsX = new float[NX* NY];
+float *EfieldsY = new float[NX* NY];
 
 // GUI variables
-bool render_shapes = true;
 float *rand_property = new float[NX * NY];
 static int current_mode = 1;
-const char *modes[] = {"default", "Divergence", "Pressure"};
+const char *modes[] = {"Magnitude", "Field Strength", "Pressure"};
 static float color1[3] = {1.0f, 0.0f, 0.0f};
 static float color2[3] = {0.0f, 0.0f, 1.0f};
 
-bool render_edge_velocities = true;
-int arrow_thickness = 2;
-float head_fraction = 0.3f;
-float arrow_normalization = 2.0f;
-float arrow_max_size = 20.0f;
-static float arrow_color[3] = {0.1f, 0.8f, 0.1f};
 
-bool render_flow_field = true;
-float flow_field_density_x = 0.1f;
-float flow_field_density_y = 0.1f;
-static float flow_field_color[3] = {0.8f, 0.1f, 0.8f};
-float flow_arrow_normalization = 3.0f;
-float flow_arrow_max_size = 20.0f;
-int flow_arrow_thickness = 1;
-float flow_arrow_head_fraction = 0.2f;
 
-float divergence_magnitude_range = 2.0f;
-float pressure_magnitude_range = 100.0f;
-
-int DIVERGENCE_ITERATIONS = DIVERGENCE_ITERATIONS_DEFAULT;
 float DT = DT_default;
-float fluid_density = 1.225f;
-bool solve_pressure_divergence_free = false;
 
 bool apply_gravity = false;
 float gravity_acceleration = 9.81f;
 
-int current_iterator = RK4_INDEX;
-const char *iterators[] = {"RK2", "RK4"};
-bool advect_velocity_field = false;
+
 sf::RenderWindow window;
 sf::Vector2i mouse_previous_screen_pos;
-bool is_mouse_dragging = false;
 float dt_inner = 0.016f;
+float sim_time = 0.0f;
 
 int main()
 {
@@ -127,7 +101,6 @@ int main()
 
     sf::Clock deltaClock;
     set_walls_dirichlet_boundary_conditions(hvels, vvels, sim_dimensions, nullptr, 0);
-    calculate_divergences(hvels, vvels, sim_dimensions, divergences);
     while (window.isOpen())
     {
         if (solve_pressure_divergence_free)
@@ -184,7 +157,7 @@ int main()
                         const float slowdown = 0.1;
                     sf::Vector2f mouse_velocity_physics = sf::Vector2f(slowdown*(float)mouse_delta_screen_pos.x * ((float)SIZE_PHYSICS_X_MAX_default / (float)SCREEN_WIDTH), slowdown*(float)mouse_delta_screen_pos.y * ((float)SIZE_PHYSICS_Y_MAX_default / (float)SCREEN_HEIGHT)) / dt_inner;
 
-                    impart_velocity_to_fluid_field(hvels, vvels, sim_dimensions, mouse_current_physics_pos.x, mouse_current_physics_pos.y, 0.01f, mouse_velocity_physics);
+                    // impart_velocity_to_fluid_field(hvels, vvels, sim_dimensions, mouse_current_physics_pos.x, mouse_current_physics_pos.y, 0.01f, mouse_velocity_physics);
                     // int mouse_x_cell = (int)((float)(mouse_current_screen_pos.x - SCREEN_OFFSET_X) * ((float)SIZE_PHYSICS_X_MAX_default / (float)SCREEN_WIDTH));
                     // int mouse_y_cell = (int)((float)(mouse_current_screen_pos.y - SCREEN_OFFSET_Y) * ((float)SIZE_PHYSICS_Y_MAX_default / (float)SCREEN_HEIGHT));
                     // const int lower_idx = clamp(mouse_x_cell, 0, NX - 1) + clamp(mouse_y_cell, 0, NY - 1) * NX;
