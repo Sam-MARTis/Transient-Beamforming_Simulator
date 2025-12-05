@@ -44,7 +44,7 @@ float *Emags = new float[NX* NY];
 // GUI variables
 float *rand_property = new float[NX * NY];
 static int current_mode = 1;
-const char *modes[] = {"Magnitude", "Field Strength", "Pressure"};
+const char *modes[] = {"Y", "Field Strength", "Pressure"};
 static float color1[3] = {1.0f, 0.0f, 0.0f};
 static float color2[3] = {0.0f, 0.0f, 1.0f};
 
@@ -62,15 +62,26 @@ float dt_inner = 0.016f;
 float sim_time = 0.0f;
 
 const float elements_fraction = 0.4f;
-const int num_transmitter_elements = 5;
+ int num_transmitter_elements = 5;
 bool play_simulation = false;
-float Ey_range = 0.1f;
 float frequency_transmitter = 1.0f;
-float csq = 10.0f;
+float csq = 0.5f;
 float dphase_net = 1.0f;
 float avg_disp_qty = 0.0f;
 
 int speed_up_factor = 1;
+float Ey_range = 0.03f;
+const float Ey_range_max = 1.0f;
+const float Ey_range_min = -Ey_range_max;
+const float csq_min = 0.1f;
+const float csq_max = 1.0f;
+
+float E_mag = 0.5f;
+const float E_mag_max = 5.0f;
+const float E_mag_min = 0.1f;
+
+
+int colour_brightening = 3;
 int main()
 {
     window.create(sf::VideoMode({SCREEN_WIDTH + (SCREEN_OFFSET_X + SCREEN_END_X_PADDING), SCREEN_HEIGHT + (SCREEN_OFFSET_Y + SCREEN_END_Y_PADDING)}, 10), "Fluid Simulation");
@@ -144,10 +155,13 @@ int main()
         ImGui::NewLine();
         ImGui::Checkbox("Solve", &play_simulation);
         ImGui::SliderFloat("Input Frequency (Hz)", &frequency_transmitter, 0.1f, 10.0f, "%.3f Hz");
-        ImGui::InputFloat("C^2", &csq, 1.0f, 100.0f, "%.3f");
+   
+        ImGui::InputFloat("C^2", &csq, csq_min, csq_max, "%.3f");
         ImGui::InputInt("Speed Up Factor", &speed_up_factor, 1, 50);
-        ImGui::InputFloat("Net Phase Delay (rad)", &dphase_net, 0.1f, 3.14f, "%.3f rad");
+        ImGui::InputFloat("Net Phase Delay (rad)", &dphase_net, 0.01f, 3.14f, "%.3f rad");
         ImGui::SliderFloat("Offset Display", &avg_disp_qty, -10.0f*Ey_range, 10.0f*Ey_range, "%.3f");
+        ImGui::SliderInt("Number of Transmitter Elements", &num_transmitter_elements, 1, 20);
+        ImGui::SliderInt("Colour Brightening", &colour_brightening, 1, 5);
         ImGui::NewLine();
 
         ImGui::Text("Rendering Options");
@@ -165,24 +179,25 @@ int main()
             }
             ImGui::EndCombo();
         }
-        // if (current_mode == DISPLAY_DIVERGENCE_INDEX)
+        if (current_mode == Y_INDEX)
         {
+ 
             ImGui::Spacing();
-            ImGui::SliderFloat("Electric Y Range", &Ey_range, 0.0001f , 0.005f , "%.3f");
+            ImGui::SliderFloat("Electric Y Range", &Ey_range, Ey_range_min, Ey_range_max, "%.3f");
             ImGui::Text("Electric Color Settings");
             ImGui::ColorEdit3("Color 1", color1);
             ImGui::ColorEdit3("Color 2", color2);
             ImGui::Spacing();
         }
-        // else if (current_mode == DISPLAY_PRESSURE_INDEX)
-        // {
-        //     ImGui::Spacing();
-        //     ImGui::SliderFloat("Pressure Range", &pressure_magnitude_range, 0.1f, 500.0f, "%.3f");
-        //     ImGui::Text("Pressure Color Settings");
-        //     ImGui::ColorEdit3("Color 1", color1);
-        //     ImGui::ColorEdit3("Color 2", color2);
-        //     ImGui::Spacing();
-        // }
+        else if (current_mode == MAG_STRENGTH_INDEX)
+        {
+            ImGui::Spacing();
+            ImGui::SliderFloat("Mag Range", &E_mag, E_mag_min, E_mag_max, "%.3f");
+            ImGui::Text("Mag Color Settings");
+            ImGui::ColorEdit3("Color 1", color1);
+            ImGui::ColorEdit3("Color 2", color2);
+            ImGui::Spacing();
+        }
 
         // ImGui::Checkbox("Render Edge Velocities", &render_edge_velocities);
         // if (render_edge_velocities)
@@ -220,22 +235,28 @@ int main()
         if (play_simulation)
         {
             // sim_time += DT;
-            get_field_strength_magnitude(EfieldsX, EfieldsY, sim_dimensions, Emags);
+            get_field_strength_magnitude(EfieldsX, EfieldsY, sim_dimensions, Emags, colour_brightening);
 
         
         
-            display_shapes(window, main_shapes, sim_dimensions, Emags, avg_disp_qty, Ey_range + avg_disp_qty, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
-            // if (current_mode == DISPLAY_DIVERGENCE_INDEX)
+            if (current_mode == Y_INDEX){
+
+                display_shapes(window, main_shapes, sim_dimensions, EfieldsY, -Ey_range + avg_disp_qty, Ey_range + avg_disp_qty, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
+            }
+            else if (current_mode == MAG_STRENGTH_INDEX)
+            {
+                display_shapes(window, main_shapes, sim_dimensions, Emags, avg_disp_qty, E_mag, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
+            }
             // {
-            // }
-            // else if (current_mode == DISPLAY_DEFAULT_INDEX)
-            // {
-            //     display_shapes(window, main_shapes, sim_dimensions, nullptr, 0.0f, 1.0f, sf::Color::Red, sf::Color::Blue);
-            // }
-            // else if (current_mode == DISPLAY_PRESSURE_INDEX)
-            // {
-            //     display_shapes(window, main_shapes, sim_dimensions, pressures, -pressure_magnitude_range, pressure_magnitude_range, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
-            // }
+                // }
+                // else if (current_mode == DISPLAY_DEFAULT_INDEX)
+                // {
+                    //     display_shapes(window, main_shapes, sim_dimensions, nullptr, 0.0f, 1.0f, sf::Color::Red, sf::Color::Blue);
+                    // }
+                    // else if (current_mode == DISPLAY_PRESSURE_INDEX)
+                    // {
+                        //     display_shapes(window, main_shapes, sim_dimensions, pressures, -pressure_magnitude_range, pressure_magnitude_range, convert_float_to_sf_colour(color1), convert_float_to_sf_colour(color2));
+                        // }
         }
         // if (render_edge_velocities)
         // {

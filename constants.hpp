@@ -33,8 +33,8 @@
 
 // Other
 // Options
-#define DISPLAY_DEFAULT_INDEX 0
-#define DISPLAY_DIVERGENCE_INDEX 1
+#define Y_INDEX 0
+#define MAG_STRENGTH_INDEX 1
 #define DISPLAY_PRESSURE_INDEX 2
 
 

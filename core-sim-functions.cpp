@@ -35,7 +35,7 @@ void set_walls_dirichlet_boundary_conditions(float *EfieldsX, float *EfieldsY, c
     for(int elem_i = 0; elem_i<num_of_transmitter_elements; elem_i++){
         const int obs_x = start_x + elem_i * obstacle_spacing;
         EfieldsY[FLAT(obs_x, 0, nx)] = E_magnitude_default* sinf(2.0f * 3.14159265f * frequency_transmitter* time + dphase_elem * (float)(elem_i));
-        EfieldsX[FLAT(obs_x, 0, nx)] = 0.0f;
+        // EfieldsX[FLAT(obs_x, 0, nx)] = 0.0f;
     }
 
 }
@@ -43,24 +43,30 @@ void set_walls_dirichlet_boundary_conditions(float *EfieldsX, float *EfieldsY, c
 void step_time(float* EfieldsX, float* EfieldsY, const Dimensions& dims, const float csq, const float dt){
     const int nx = dims.nx;
     const int ny = dims.ny;
+    
+    // Calculate grid spacing
+    const float dx = (float)dims.size_physics_x_max / (float)nx;
+    const float dy = (float)dims.size_physics_y_max / (float)ny;
+    const float dx_sq = dx * dx;
+    const float dy_sq = dy * dy;
+    
     float *laplaciansX = new float[(nx-2) *( ny-2)];
     float *laplaciansY = new float[(nx-2) *( ny-2)];
     for(int i=1; i< nx-1; i++){
         for(int j=1; j< ny-1; j++){
             const int idx = FLAT(i, j, nx);
-            const int lap_idx = FLAT(i-1, j-1, nx-2);
             const float centerX = EfieldsX[idx];
             const float centerY = EfieldsY[idx];
             const float leftX = EfieldsX[FLAT(i-1, j, nx)];
             const float rightX = EfieldsX[FLAT(i+1, j, nx)];
             const float downX = EfieldsX[FLAT(i, j-1, nx)];
             const float upX = EfieldsX[FLAT(i, j+1, nx)];
-            const float laplacianX = (leftX + rightX + downX + upX - 4.0f * centerX);
+            const float laplacianX = (leftX + rightX - 2.0f * centerX) / dx_sq + (downX + upX - 2.0f * centerX) / dy_sq;
             const float leftY = EfieldsY[FLAT(i-1, j, nx)];
             const float rightY = EfieldsY[FLAT(i+1, j, nx)];
             const float downY = EfieldsY[FLAT(i, j-1, nx)];
             const float upY = EfieldsY[FLAT(i, j+1, nx)];
-            const float laplacianY = (leftY + rightY + downY + upY - 4.0f * centerY);
+            const float laplacianY = (leftY + rightY - 2.0f * centerY) / dx_sq + (downY + upY - 2.0f * centerY) / dy_sq;
             laplaciansX[FLAT(i-1, j-1, nx-2)] = laplacianX;
             laplaciansY[FLAT(i-1, j-1, nx-2)] = laplacianY;
         }
@@ -73,8 +79,10 @@ void step_time(float* EfieldsX, float* EfieldsY, const Dimensions& dims, const f
             EfieldsY[idx] += csq * laplaciansY[lap_idx] * dt;
         }
     }
+    free(laplaciansX);
+    free(laplaciansY);
 }
-void get_field_strength_magnitude(const float* EfieldsX, const float* EfieldsY, const Dimensions& dims, float* magnitude_out){
+void get_field_strength_magnitude(const float* EfieldsX, const float* EfieldsY, const Dimensions& dims, float* magnitude_out, const int num_roots){
     const int nx = dims.nx;
     const int ny = dims.ny;
     for(int i=0; i< nx; i++){
@@ -82,7 +90,11 @@ void get_field_strength_magnitude(const float* EfieldsX, const float* EfieldsY, 
             const int idx = FLAT(i, j, nx);
             const float Ex = EfieldsX[idx];
             const float Ey = EfieldsY[idx];
-            magnitude_out[idx] = sqrtf(Ex*Ex + Ey*Ey);
+            float E_mag = sqrtf(Ex*Ex + Ey*Ey);
+            for(int r=0; r< num_roots -1; r++){
+                E_mag = sqrtf(E_mag);
+            }
+            magnitude_out[idx] = E_mag;
         }
     }
 }
